@@ -135,8 +135,8 @@ func (c *Client) GetRunningPodsWithImage(imageNames []string, namespace string, 
 	return nil, nil
 }
 
-// GetNewestRunningPod is a fake implementation of function
-func (c *Client) GetNewestRunningPod(labelSelector string, imageSelector []string, namespace string, maxWaiting time.Duration) (*k8sv1.Pod, error) {
+// GetNewestPodOnceRunning is a fake implementation of function
+func (c *Client) GetNewestPodOnceRunning(labelSelector string, imageSelector []string, namespace string, maxWaiting time.Duration) (*k8sv1.Pod, error) {
 	return nil, nil
 }
 

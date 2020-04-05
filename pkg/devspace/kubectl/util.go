@@ -2,12 +2,13 @@ package kubectl
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"net"
 	"net/http"
 	"os/exec"
 	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/devspace-cloud/devspace/pkg/devspace/kubectl/portforward"
 	"github.com/devspace-cloud/devspace/pkg/util/log"
@@ -92,8 +93,10 @@ func (client *client) EnsureDefaultNamespace(log log.Logger) error {
 				Name: client.namespace,
 			},
 		})
+		if err == nil {
+			log.Donef("Created namespace: %s", client.Namespace())
+		}
 
-		log.Donef("Created namespace: %s", client.Namespace())
 	}
 
 	return err
@@ -161,8 +164,8 @@ func (client *client) GetRunningPodsWithImage(imageNames []string, namespace str
 
 	pods := []*k8sv1.Pod{}
 	now := time.Now()
-	minWait := time.Second * 60
-	err := wait.Poll(time.Second, maxWaiting, func() (bool, error){
+	minWait := second * 60
+	err := wait.Poll(second, maxWaiting, func() (bool, error) {
 		podList, err := client.KubeClient().CoreV1().Pods(namespace).List(metav1.ListOptions{})
 		if err != nil {
 			return false, err
@@ -221,14 +224,14 @@ func compareImageNames(image1 string, image2 string) bool {
 	}
 }
 
-// GetNewestRunningPod retrieves the first pod that is found that has the status "Running" using the label selector string
-func (client *client) GetNewestRunningPod(labelSelector string, imageSelector []string, namespace string, maxWaiting time.Duration) (*k8sv1.Pod, error) {
+// GetNewestPodOnceRunning retrieves the first pod that is found that has the status "Running" using the label selector string
+func (client *client) GetNewestPodOnceRunning(labelSelector string, imageSelector []string, namespace string, maxWaiting time.Duration) (*k8sv1.Pod, error) {
 	if namespace == "" {
 		namespace = client.namespace
 	}
 
 	now := time.Now()
-	waitingInterval := 1 * time.Second
+	waitingInterval := 1 * second
 	for ok := true; ok; ok = maxWaiting > 0 {
 		time.Sleep(waitingInterval)
 
@@ -294,8 +297,7 @@ func GetPodStatus(pod *k8sv1.Pod) string {
 
 	initializing := false
 
-	for i := range pod.Status.InitContainerStatuses {
-		container := pod.Status.InitContainerStatuses[i]
+	for i, container := range pod.Status.InitContainerStatuses {
 
 		switch {
 		case container.State.Terminated != nil && container.State.Terminated.ExitCode == 0:

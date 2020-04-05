@@ -1,9 +1,22 @@
 package build
 
 import (
+	"errors"
+	"reflect"
 	"testing"
 
+	"github.com/devspace-cloud/devspace/pkg/devspace/build/builder/custom"
+	dockerbuilder "github.com/devspace-cloud/devspace/pkg/devspace/build/builder/docker"
+	"github.com/devspace-cloud/devspace/pkg/devspace/build/builder/kaniko"
 	"github.com/devspace-cloud/devspace/pkg/devspace/config/versions/latest"
+	fakedocker "github.com/devspace-cloud/devspace/pkg/devspace/docker/testing"
+	fakekube "github.com/devspace-cloud/devspace/pkg/devspace/kubectl/testing"
+	"github.com/devspace-cloud/devspace/pkg/util/log"
+	"github.com/devspace-cloud/devspace/pkg/util/ptr"
+	dockertypes "github.com/docker/docker/api/types"
+	"gopkg.in/yaml.v2"
+	"gotest.tools/assert"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 type createBuilderTestCase struct {
@@ -20,7 +33,7 @@ type createBuilderTestCase struct {
 }
 
 func TestCreateBuilder(t *testing.T) {
-	/*fakeDocker := &fakedocker.FakeClient{
+	fakeDocker := &fakedocker.FakeClient{
 		AuthConfig: &dockertypes.AuthConfig{},
 	}
 	fakeClient := &fakekube.Client{
@@ -118,5 +131,5 @@ func TestCreateBuilder(t *testing.T) {
 		assert.NilError(t, err, "Error marshaling expected builder in testCase %s", testCase.name)
 		assert.Equal(t, string(builderAsYaml), string(expectationAsYaml), "Unexpected cache in testCase %s", testCase.name)
 		assert.Equal(t, reflect.TypeOf(builder), reflect.TypeOf(testCase.expectedBuilder), "Unexpected cache type in testCase %s", testCase.name)
-	}*/
+	}
 }

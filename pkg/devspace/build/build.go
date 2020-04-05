@@ -6,6 +6,7 @@ import (
 
 	"github.com/devspace-cloud/devspace/pkg/devspace/config/generated"
 	"github.com/devspace-cloud/devspace/pkg/devspace/config/versions/latest"
+	"github.com/devspace-cloud/devspace/pkg/devspace/docker"
 	"github.com/devspace-cloud/devspace/pkg/devspace/hook"
 	"github.com/devspace-cloud/devspace/pkg/devspace/kubectl"
 	logpkg "github.com/devspace-cloud/devspace/pkg/util/log"
@@ -40,6 +41,8 @@ type controller struct {
 
 	hookExecuter hook.Executer
 	client       kubectl.Client
+
+	dockerClient docker.Client
 }
 
 // NewController creates a new image build controller

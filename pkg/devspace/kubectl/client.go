@@ -56,7 +56,7 @@ type Client interface {
 	EnsureDefaultNamespace(log log.Logger) error
 	EnsureGoogleCloudClusterRoleBinding(log log.Logger) error
 	GetRunningPodsWithImage(imageNames []string, namespace string, maxWaiting time.Duration) ([]*k8sv1.Pod, error)
-	GetNewestRunningPod(labelSelector string, imageSelector []string, namespace string, maxWaiting time.Duration) (*k8sv1.Pod, error)
+	GetNewestPodOnceRunning(labelSelector string, imageSelector []string, namespace string, maxWaiting time.Duration) (*k8sv1.Pod, error)
 	NewPortForwarder(pod *k8sv1.Pod, ports []string, addresses []string, stopChan chan struct{}, readyChan chan struct{}, errorChan chan error) (*portforward.PortForwarder, error)
 	IsLocalKubernetes() bool
 }
@@ -212,6 +212,9 @@ func NewClientBySelect(allowPrivate bool, switchContext bool, kubeLoader kubecon
 	return nil, errors.New("We should not reach this point")
 }
 
+// This constant is used as a variable so it can be overwritten in a test
+var second = time.Second
+
 // PrintWarning prints a warning if the last kube context is different than this one
 func (client *client) PrintWarning(generatedConfig *generated.Config, noWarning, shouldWait bool, log log.Logger) error {
 	if generatedConfig != nil && log.GetLevel() >= logrus.InfoLevel && noWarning == false {
@@ -243,7 +246,7 @@ func (client *client) PrintWarning(generatedConfig *generated.Config, noWarning,
 
 			if wait && shouldWait {
 				log.StartWait("Will continue in 10 seconds...")
-				time.Sleep(10 * time.Second)
+				time.Sleep(10 * second)
 				log.StopWait()
 				log.WriteString("\n")
 			}
@@ -253,7 +256,7 @@ func (client *client) PrintWarning(generatedConfig *generated.Config, noWarning,
 		if shouldWait && client.namespace == metav1.NamespaceDefault && (generatedConfig.GetActive().LastContext == nil || generatedConfig.GetActive().LastContext.Namespace != metav1.NamespaceDefault) {
 			log.Warn("Deploying into the 'default' namespace is usually not a good idea as this namespace cannot be deleted\n")
 			log.StartWait("Will continue in 5 seconds...")
-			time.Sleep(5 * time.Second)
+			time.Sleep(5 * second)
 			log.StopWait()
 		}
 	}

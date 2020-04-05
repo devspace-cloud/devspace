@@ -1,10 +1,10 @@
 package targetselector
 
 import (
-	"github.com/devspace-cloud/devspace/pkg/devspace/config/generated"
 	"strings"
 	"time"
 
+	"github.com/devspace-cloud/devspace/pkg/devspace/config/generated"
 	"github.com/devspace-cloud/devspace/pkg/devspace/config/versions/latest"
 	"github.com/devspace-cloud/devspace/pkg/devspace/kubectl"
 	"github.com/devspace-cloud/devspace/pkg/util/log"
@@ -94,7 +94,7 @@ func (t *TargetSelector) GetPod(log log.Logger) (*v1.Pod, error) {
 
 			return pod, nil
 		} else if t.labelSelector != "" {
-			pod, err := t.kubeClient.GetNewestRunningPod(t.labelSelector, t.imageSelector, t.namespace, timeout)
+			pod, err := t.kubeClient.GetNewestPodOnceRunning(t.labelSelector, t.imageSelector, t.namespace, timeout)
 			if err != nil {
 				return nil, err
 			}
@@ -111,6 +111,10 @@ func (t *TargetSelector) GetPod(log log.Logger) (*v1.Pod, error) {
 			if len(pods) == 1 {
 				return pods[0], nil
 			} else if len(pods) == 0 {
+				return nil, errors.Errorf("Couldn't find a running pod with image selector '%s'", strings.Join(t.imageSelector, ", "))
+			}
+
+			if len(pods) == 0 {
 				return nil, errors.Errorf("Couldn't find a running pod with image selector '%s'", strings.Join(t.imageSelector, ", "))
 			}
 
