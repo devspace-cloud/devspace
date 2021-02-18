@@ -152,7 +152,7 @@ func Wrapf(other, newDescriptive error, format string, args ...interface{}) erro
 	return err
 }
 
-// Mask masks the given error with the given format string and arguments (like
+// Maskf masks the given error with the given format string and arguments (like
 // fmt.Sprintf), returning a new error that maintains the error stack, but
 // hides the underlying error type.  The error string still contains the full
 // annotations. If you want to hide the annotations, call Wrap.
@@ -289,7 +289,7 @@ func errorStack(err error) []string {
 		if err, ok := err.(locationer); ok {
 			file, line := err.Location()
 			// Strip off the leading GOPATH/src path elements.
-			file = trimGoPath(file)
+			file = trimSourcePath(file)
 			if file != "" {
 				buff = append(buff, fmt.Sprintf("%s:%d", file, line)...)
 				buff = append(buff, ": "...)

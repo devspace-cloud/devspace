@@ -5,7 +5,7 @@
 [![GoDoc](https://godoc.org/github.com/juju/errors?status.svg)](https://godoc.org/github.com/juju/errors)
 
 The juju/errors provides an easy way to annotate errors without losing the
-orginal error context.
+original error context.
 
 The exported `New` and `Errorf` functions are designed to replace the
 `errors.New` and `fmt.Errorf` functions respectively. The same underlying
@@ -595,7 +595,7 @@ For example:
 ``` go
 func NewErrWithCause(other error, format string, args ...interface{}) Err
 ```
-NewErrWithCause is used to return an Err with case by other error for the purpose of embedding in other
+NewErrWithCause is used to return an Err with cause by other error for the purpose of embedding in other
 structures. The location is not specified, and needs to be set with a call
 to SetLocation.
 

@@ -21,4 +21,4 @@ check-go:
 
 docs:
 	godoc2md github.com/juju/errors > README.md
-	sed -i 's|\[godoc-link-here\]|[![GoDoc](https://godoc.org/github.com/juju/errors?status.svg)](https://godoc.org/github.com/juju/errors)|' README.md 
+	sed -i '5i[\[GoDoc](https://godoc.org/github.com/juju/errors?status.svg)](https://godoc.org/github.com/juju/errors)' README.md 

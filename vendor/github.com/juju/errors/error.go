@@ -52,7 +52,7 @@ func NewErr(format string, args ...interface{}) Err {
 	}
 }
 
-// NewErrWithCause is used to return an Err with case by other error for the purpose of embedding in other
+// NewErrWithCause is used to return an Err with cause by other error for the purpose of embedding in other
 // structures. The location is not specified, and needs to be set with a call
 // to SetLocation.
 //
@@ -90,7 +90,7 @@ func (e *Err) Underlying() error {
 	return e.previous
 }
 
-// The Cause of an error is the most recent error in the error stack that
+// Cause returns the most recent error in the error stack that
 // meets one of these criteria: the original error that was raised; the new
 // error that was passed into the Wrap function; the most recently masked
 // error; or nil if the error itself is considered the Cause.  Normally this
@@ -143,6 +143,10 @@ func (e *Err) Format(s fmt.State, verb rune) {
 		fallthrough
 	case 's':
 		fmt.Fprintf(s, "%s", e.Error())
+	case 'q':
+		fmt.Fprintf(s, "%q", e.Error())
+	default:
+		fmt.Fprintf(s, "%%!%c(%T=%s)", verb, e, e.Error())
 	}
 }
 
@@ -155,7 +159,7 @@ func (unformatter) Format() { /* break the fmt.Formatter interface */ }
 // frames above the call.
 func (e *Err) SetLocation(callDepth int) {
 	_, file, line, _ := runtime.Caller(callDepth + 1)
-	e.file = trimGoPath(file)
+	e.file = trimSourcePath(file)
 	e.line = line
 }
 
