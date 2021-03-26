@@ -1,4 +1,4 @@
-version: v1beta5
+version: v1beta9
 deployments:
 - name: dependency2
   helm:
@@ -6,4 +6,3 @@ deployments:
     values:
       containers:
       - image: nginx
-

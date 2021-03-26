@@ -1,0 +1,27 @@
+{{- range $componentIndex, $component := .Values.components }}
+{{- range $portMapIndex, $portMapUnused := $component.service.ports }}
+{{- if eq $portMapIndex 0 }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $component.service.name | default "service-$componentIndex" | quote }}
+  labels:
+    "app.kubernetes.io/name": {{ $.Release.Name | quote }}
+    "app.kubernetes.io/managed-by": {{ $.Release.Service | quote }}
+    "helm.sh/chart": "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+spec:
+  ports:
+    {{- range $portMapIndex, $portMap := $component.service.ports }}
+    - name: "port-{{ $portMapIndex }}"
+      port: {{ $portMap.externalPort }}
+      targetPort: {{ $portMap.containerPort }}
+      protocol: {{ $portMap.protocol | default "TCP" | quote }}
+    {{- end }}
+  selector:
+    "app.kubernetes.io/name": {{ $.Release.Name | quote }}
+    "app.kubernetes.io/component": {{ $component.name | quote }}
+  type: {{ $component.service.type | default "ClusterIP" | quote }}
+---
+{{- end }}
+{{- end }}
+{{- end }}

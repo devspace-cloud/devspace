@@ -1,139 +1,86 @@
 package enter
 
 import (
-	"time"
+	"os"
 
 	"github.com/loft-sh/devspace/cmd"
 	"github.com/loft-sh/devspace/cmd/flags"
+	ginkgo "github.com/loft-sh/devspace/e2e/ginkgo-ext"
 	"github.com/loft-sh/devspace/e2e/utils"
-	"github.com/loft-sh/devspace/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/loft-sh/devspace/pkg/devspace/plugin"
+	fakelog "github.com/loft-sh/devspace/pkg/util/log/testing"
+	"github.com/spf13/cobra"
 )
 
-type Runner struct{}
+var _ = ginkgo.Describe("dev", func() {
+	var (
+		f            *utils.BaseCustomFactory
+		testDir      string
+		tmpDir       string
+		stdOutBackup *os.File
+		stdoutReader *os.File
+	)
 
-var RunNew = &Runner{}
+	ginkgo.BeforeAll(func() {
+		// Create tmp dir
+		var err error
+		testDir = "tests/enter/testdata"
+		tmpDir, _, err = utils.CreateTempDir()
+		utils.ExpectNoError(err, "error creating tmp dir")
 
-func (r *Runner) SubTests() []string {
-	subTests := []string{}
-	for k := range availableSubTests {
-		subTests = append(subTests, k)
-	}
+		// Copy the testdata into the temp dir
+		err = utils.Copy(testDir, tmpDir)
+		utils.ExpectNoError(err, "error copying test dir")
 
-	return subTests
-}
+		// Make backup of stdout
+		stdOutBackup = os.Stdout
 
-var availableSubTests = map[string]func(factory *utils.BaseCustomFactory, logger log.Logger) error{
-	"default": runDefault,
-}
+		// Set factory
+		f = utils.DefaultFactory
+	})
 
-func (r *Runner) Run(subTests []string, ns string, pwd string, logger log.Logger, verbose bool, timeout int) error {
-	logger.Info("Run test 'enter'")
+	ginkgo.BeforeEach(func() {
+		r, w, err := os.Pipe()
+		utils.ExpectNoError(err, "create io pipe for stdout")
+		os.Stdout = w
+		stdoutReader = r
+	})
 
-	// Populates the tests to run with all the available sub tests if no sub tests are specified
-	if len(subTests) == 0 {
-		for subTestName := range availableSubTests {
-			subTests = append(subTests, subTestName)
+	ginkgo.AfterAll(func() {
+		os.Stdout = stdOutBackup
+		utils.DeleteTempAndResetWorkingDir(tmpDir, f.Pwd, f.GetLog())
+	})
+
+	ginkgo.It("default", func() {
+
+		// Change working directory
+		err := utils.ChangeWorkingDir(tmpDir, fakelog.NewFakeLogger())
+		utils.ExpectNoError(err, "error changing directory")
+
+		// run dev command
+		devCmd := &cmd.DevCmd{
+			Wait:            true,
+			ExitAfterDeploy: true,
+			GlobalFlags: &flags.GlobalFlags{
+				Silent: true,
+			},
 		}
-	}
+		err = devCmd.Run(f, []plugin.Metadata{}, &cobra.Command{}, []string{})
+		utils.ExpectNoError(err, "run dev command")
 
-	f := &utils.BaseCustomFactory{
-		Pwd:     pwd,
-		Verbose: verbose,
-		Timeout: timeout,
-	}
-
-	// Runs the tests
-	for _, subTestName := range subTests {
-		f.ResetLog()
-		c1 := make(chan error)
-
-		go func() {
-			err := func() error {
-				f.Namespace = utils.GenerateNamespaceName("test-enter-" + subTestName)
-
-				err := beforeTest(f)
-				defer afterTest(f)
-				if err != nil {
-					return errors.Errorf("test 'enter' failed: %s %v", f.GetLogContents(), err)
-				}
-
-				err = availableSubTests[subTestName](f, logger)
-				utils.PrintTestResult("enter", subTestName, err, logger)
-				if err != nil {
-					return errors.Errorf("test 'enter' failed: %s %v", f.GetLogContents(), err)
-				}
-
-				return nil
-			}()
-			c1 <- err
-		}()
-
-		select {
-		case err := <-c1:
-			if err != nil {
-				return err
-			}
-		case <-time.After(time.Duration(timeout) * time.Second):
-			return errors.Errorf("Timeout error - the test did not return within the specified timeout of %v seconds: %s", timeout, f.GetLogContents())
+		// run enter command
+		enterCmd := &cmd.EnterCmd{
+			GlobalFlags: &flags.GlobalFlags{
+				Silent: true,
+			},
 		}
-	}
+		err = enterCmd.Run(f, []plugin.Metadata{}, &cobra.Command{}, []string{"echo", "enter test hello"})
+		utils.ExpectNoError(err, "run enter command")
 
-	return nil
-}
-
-func beforeTest(f *utils.BaseCustomFactory) error {
-	deployConfig := &cmd.DeployCmd{
-		GlobalFlags: &flags.GlobalFlags{
-			Namespace: f.Namespace,
-			NoWarn:    true,
-		},
-		ForceBuild: false,
-		SkipBuild:  true,
-		SkipPush:   true,
-	}
-
-	dirPath, _, err := utils.CreateTempDir()
-	if err != nil {
-		return err
-	}
-
-	f.DirPath = dirPath
-
-	err = utils.Copy(f.Pwd+"/tests/enter/testdata", dirPath)
-	if err != nil {
-		return err
-	}
-
-	err = utils.ChangeWorkingDir(dirPath, f.GetLog())
-	if err != nil {
-		return err
-	}
-
-	// Create kubectl client
-	client, err := f.NewKubeClientFromContext(deployConfig.KubeContext, deployConfig.Namespace, deployConfig.SwitchContext)
-	if err != nil {
-		return errors.Errorf("Unable to create new kubectl client: %v", err)
-	}
-
-	f.Client = client
-	err = deployConfig.Run(f, nil, nil, nil)
-	if err != nil {
-		return errors.Errorf("An error occured while deploying: %v", err)
-	}
-
-	time.Sleep(5 * time.Second)
-
-	// Checking if pods are running correctly
-	err = utils.AnalyzePods(client, f.Namespace, f.GetLog())
-	if err != nil {
-		return errors.Errorf("An error occured while analyzing pods: %v", err)
-	}
-
-	return nil
-}
-
-func afterTest(f *utils.BaseCustomFactory) {
-	utils.DeleteTempAndResetWorkingDir(f.DirPath, f.Pwd, f.GetLog())
-	utils.DeleteNamespace(f.Client, f.Namespace)
-}
+		// check output
+		buf := make([]byte, 1024)
+		n, err := stdoutReader.Read(buf)
+		utils.ExpectNoError(err, "read from output")
+		utils.ExpectEqual(string(buf[:n]), "enter test hello\n", "Unexpected output")
+	})
+})

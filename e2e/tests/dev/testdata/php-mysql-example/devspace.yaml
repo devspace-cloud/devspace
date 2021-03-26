@@ -1,0 +1,45 @@
+version: v1beta9
+images:
+  default:
+    image: mydockeruser/devspace
+deployments:
+- name: mysql
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: mypassword
+        - name: MYSQL_DATABASE
+          value: mydatabase
+        image: mysql:5.7
+        volumeMounts:
+        - containerPath: /var/lib/mysql
+          volume:
+            name: mysql-data
+            subPath: /mysql
+      service:
+        name: mysql
+        ports:
+        - port: 3306
+      volumes:
+      - name: mysql-data
+        size: 5Gi
+- name: php-mysql-example
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: mydockeruser/devspace
+      service:
+        ports:
+        - port: 80
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 8080
+      remotePort: 80
+  sync:
+  - imageName: default

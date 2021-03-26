@@ -1,11 +1,11 @@
-version: v1beta5
+version: v1beta9
 images:
   php:
     image: php
     dockerfile: php/Dockerfile
     context: php/
 deployments:
-- name: root-app
+- name: root
   helm:
     componentChart: true
     values:
@@ -18,5 +18,6 @@ deployments:
 dependencies:
 - source:
     path: dependency1
+  name: test
 - source:
     path: dependency2

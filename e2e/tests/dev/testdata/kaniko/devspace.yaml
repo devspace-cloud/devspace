@@ -1,0 +1,39 @@
+version: v1beta9
+images:
+  default:
+    image: myuser/myimage
+    build:
+      kaniko:
+        cache: true
+        # custom kaniko image
+        # image: mykaniko/kaniko:latest
+        # additional mounts for the kaniko pod
+        # additionalMounts:
+        #  - configMap:
+        #      name: test
+        #      items:
+        #        - key: key
+        #          path: config.json
+        #    mountPath: /test/test
+        #  - secret:
+        #      name: test2
+        #      items:
+        #        - key: key
+        #          path: config.json
+        #    mountPath: /test/test
+deployments:
+- name: devspace-default
+  helm:
+    chart:
+      name: ./chart
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 8080
+  sync:
+  - imageName: default
+  interactive:
+    defaultEnabled: true
+    images:
+    - name: default

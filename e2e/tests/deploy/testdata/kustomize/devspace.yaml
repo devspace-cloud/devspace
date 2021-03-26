@@ -1,0 +1,23 @@
+version: v1beta9
+images:
+  default:
+    image: yourusername/devspace
+deployments:
+- name: kustomize-deploy
+  kubectl:
+    manifests:
+    - kube
+    kustomize: true
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 3000
+  sync:
+  - imageName: default
+    excludePaths:
+    - node_modules
+  interactive:
+    defaultEnabled: true
+    images:
+    - name: default

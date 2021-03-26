@@ -1,0 +1,19 @@
+{
+    "name": "node-js-sample",
+    "version": "0.0.1",
+    "description": "A sample Node.js app using Express 4",
+    "main": "index.js",
+    "scripts": {
+      "start": "node index.js",
+      "dev": "nodemon index.js"
+    },
+    "dependencies": {
+      "express": "^4.13.3",
+      "nodemon": "2.0.2"
+    },
+    "keywords": [
+      "node",
+      "express"
+    ],
+    "license": "MIT"
+  }

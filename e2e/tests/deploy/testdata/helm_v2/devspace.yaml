@@ -1,15 +1,15 @@
 version: v1beta5
 images:
   default:
-    image: dscr.io/${DEVSPACE_USERNAME}/devspace
+    image: dscr.io/mydockeruser/devspace
 deployments:
-- name: quickstart
+- name: helmv2deploy
   helm:
     v2: true
     componentChart: true
     values:
       containers:
-      - image: dscr.io/${DEVSPACE_USERNAME}/devspace
+      - image: dscr.io/mydockeruser/devspace
       service:
         ports:
         - port: 3000

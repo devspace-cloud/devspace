@@ -1,0 +1,39 @@
+# This example only works with minikube and docker desktop
+# If you want to try this example in other
+# Clusters you have to exchange the image names
+# and enable image pushing
+version: v1beta9
+images:
+  node:
+    image: node
+    dockerfile: node/Dockerfile
+    context: node/
+  php:
+    image: php
+    dockerfile: php/Dockerfile
+    context: php/
+deployments:
+- name: devspace-node
+  kubectl:
+    manifests:
+    - node/kube/*
+- name: devspace-php
+  helm:
+    chart:
+      name: php/chart
+dev:
+  ports:
+  - imageName: node
+    forward:
+    - port: 3000
+  sync:
+  - imageName: node
+    localSubPath: ./node
+    excludePaths:
+    - node_modules
+  - imageName: php
+    localSubPath: ./php
+  interactive:
+    defaultEnabled: true
+    images:
+    - name: node

@@ -1,0 +1,20 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: devspace
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: default
+      app.kubernetes.io/name: devspace-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: default
+        app.kubernetes.io/name: devspace-app
+    spec:
+      containers:
+        - name: default
+          # The correct image tag will be inserted during devspace dev / devspace deploy
+          image: mydockeruser/quickstart

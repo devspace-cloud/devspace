@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devspace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: devspace-node
+  template:
+    metadata:
+      labels:
+        release: devspace-node
+    spec:
+      containers:
+      - name: node
+        image: node

@@ -1,0 +1,28 @@
+version: v1beta9
+images:
+  default:
+    image: ${DEVSPACE_USERNAME}/e2etest
+    build:
+      kaniko:
+        cache: true
+        args:
+        - --no-push
+deployments:
+- name: helmv3deploy
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: ${DEVSPACE_USERNAME}/e2etest
+      service:
+        ports:
+        - port: 3000
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 3000
+  sync:
+  - imageName: default
+    excludePaths:
+    - node_modules

@@ -8,18 +8,11 @@ import (
 
 	"github.com/loft-sh/devspace/cmd"
 	"github.com/loft-sh/devspace/pkg/devspace/build"
-	"github.com/loft-sh/devspace/pkg/devspace/config/generated"
-	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
-	"github.com/loft-sh/devspace/pkg/devspace/kubectl/portforward"
-	"github.com/loft-sh/devspace/pkg/devspace/services/targetselector"
 	"github.com/loft-sh/devspace/pkg/util/factory"
-	"github.com/loft-sh/devspace/pkg/util/message"
-	"github.com/loft-sh/devspace/pkg/util/port"
 
 	"html"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,8 +26,12 @@ import (
 	"github.com/loft-sh/devspace/pkg/devspace/analyze"
 	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
 	logger "github.com/loft-sh/devspace/pkg/util/log"
+	fakelog "github.com/loft-sh/devspace/pkg/util/log/testing"
+	fakesurvey "github.com/loft-sh/devspace/pkg/util/survey/testing"
 	"github.com/pkg/errors"
 )
+
+var DefaultFactory = &BaseCustomFactory{}
 
 // BaseCustomFactory is a factory override for testing
 type BaseCustomFactory struct {
@@ -75,6 +72,15 @@ func (b *BaseCustomFactory) GetLog() logger.Logger {
 	}
 
 	return b.CacheLogger
+}
+
+// GetSurvey returns the logger's survey
+func (b *BaseCustomFactory) GetSurvey() (*fakesurvey.FakeSurvey, error) {
+	fakeLogger, ok := b.CacheLogger.(*fakelog.FakeLogger)
+	if ok {
+		return fakeLogger.Survey, nil
+	}
+	return nil, errors.New("Logger not a fakeLogger with survey")
 }
 
 // ChangeWorkingDir changes the working directory
@@ -153,145 +159,6 @@ func AnalyzePods(client kubectl.Client, namespace string, cachedLogger logger.Lo
 	if err != nil {
 		return err
 	}
-
-	return nil
-}
-
-func startPortForwarding(config *latest.Config, generatedConfig *generated.Config, client kubectl.Client, log logger.Logger) ([]*portforward.PortForwarder, error) {
-	if config.Dev == nil {
-		return nil, nil
-	}
-
-	var pf []*portforward.PortForwarder
-
-	for _, portForwarding := range config.Dev.Ports {
-		p, err := startForwarding(portForwarding, generatedConfig, config, client, log)
-		if err != nil {
-			return nil, err
-		}
-
-		pf = append(pf, p)
-	}
-
-	return pf, nil
-}
-
-func startForwarding(portForwarding *latest.PortForwardingConfig, generatedConfig *generated.Config, config *latest.Config, client kubectl.Client, log logger.Logger) (*portforward.PortForwarder, error) {
-	var imageSelector []string
-	if portForwarding.ImageName != "" && generatedConfig != nil {
-		imageConfigCache := generatedConfig.GetActive().GetImageCache(portForwarding.ImageName)
-		if imageConfigCache.ImageName != "" {
-			imageSelector = []string{imageConfigCache.ImageName + ":" + imageConfigCache.Tag}
-		}
-	}
-
-	selector, err := targetselector.NewTargetSelector(config, client, &targetselector.SelectorParameter{
-		ConfigParameter: targetselector.ConfigParameter{
-			Namespace:     portForwarding.Namespace,
-			LabelSelector: portForwarding.LabelSelector,
-		},
-	}, false, imageSelector)
-	if err != nil {
-		return nil, errors.Errorf("Error creating target selector: %v", err)
-	}
-
-	log.StartWait("Port-Forwarding: Waiting for containers to start...")
-	pod, err := selector.GetPod(log)
-	log.StopWait()
-	if err != nil {
-		return nil, errors.Errorf("%s: %s", message.SelectorErrorPod, err.Error())
-	} else if pod == nil {
-		return nil, nil
-	}
-
-	ports := make([]string, len(portForwarding.PortMappings))
-	addresses := make([]string, len(portForwarding.PortMappings))
-
-	for index, value := range portForwarding.PortMappings {
-		if value.LocalPort == nil {
-			return nil, errors.Errorf("port is not defined in portmapping %d", index)
-		}
-
-		localPort := strconv.Itoa(*value.LocalPort)
-		remotePort := localPort
-		if value.RemotePort != nil {
-			remotePort = strconv.Itoa(*value.RemotePort)
-		}
-
-		open, _ := port.Check(*value.LocalPort)
-		if open == false {
-			log.Warnf("Seems like port %d is already in use. Is another application using that port?", *value.LocalPort)
-		}
-
-		ports[index] = localPort + ":" + remotePort
-		if value.BindAddress == "" {
-			addresses[index] = "localhost"
-		} else {
-			addresses[index] = value.BindAddress
-		}
-	}
-
-	readyChan := make(chan struct{})
-	errorChan := make(chan error)
-
-	pf, err := client.NewPortForwarder(pod, ports, addresses, make(chan struct{}), readyChan, errorChan)
-	if err != nil {
-		return nil, errors.Errorf("Error starting port forwarding: %v", err)
-	}
-
-	go func() {
-		err := pf.ForwardPorts()
-		if err != nil {
-			log.Fatalf("Error forwarding ports: %v", err)
-		}
-	}()
-
-	// Wait till forwarding is ready
-	select {
-	case <-readyChan:
-		log.Donef("Port forwarding started on %s", strings.Join(ports, ", "))
-	case <-time.After(20 * time.Second):
-		return nil, errors.Errorf("Timeout waiting for port forwarding to start")
-	}
-
-	return pf, nil
-}
-
-// PortForwardAndPing creates port-forwardings and ping them for a 200 status code
-func PortForwardAndPing(config *latest.Config, generatedConfig *generated.Config, client kubectl.Client, cachedLogger logger.Logger) error {
-	portForwarder, err := startPortForwarding(config, generatedConfig, client, cachedLogger)
-	if err != nil {
-		return err
-	}
-
-	for _, pf := range portForwarder {
-		ports, err := pf.GetPorts()
-		if err != nil {
-			return err
-		}
-
-		for _, p := range ports {
-			url := fmt.Sprintf("http://localhost:%v/", p.Local)
-
-			resp, err := http.Get(url)
-			if err != nil {
-				return err
-			}
-
-			if resp.StatusCode == 200 {
-				cachedLogger.Donef("Pinging %v: status code 200", url)
-			} else {
-				return fmt.Errorf("pinging %v: status code %v", url, resp.StatusCode)
-			}
-		}
-	}
-
-	// We close all the port-forwardings
-	defer func() {
-		for _, v := range portForwarder {
-			v.Close()
-		}
-	}()
 
 	return nil
 }
@@ -483,8 +350,8 @@ func StringInSlice(str string, list []string) bool {
 
 // DeleteTempAndResetWorkingDir deletes /tmp dir and reinitialize the working dir
 func DeleteTempAndResetWorkingDir(tmpDir string, pwd string, log logger.Logger) {
+	ChangeWorkingDir(pwd, log)
 	DeleteTempDir(tmpDir, log)
-	_ = ChangeWorkingDir(pwd, log)
 }
 
 // LookForDeployment search for a specific deployment name among the deployments, returns true if found

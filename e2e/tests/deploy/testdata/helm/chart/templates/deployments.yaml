@@ -1,0 +1,91 @@
+{{- range $componentIndex, $component := .Values.components }}
+apiVersion: apps/v1
+{{- $kind := "Deployment" -}}
+{{- range $containerIndex, $container := $component.containers }}
+  {{- range $volumeMountIndex, $volumeMount := $container.volumeMounts }}
+    {{- range $volumeIndex, $volume := $.Values.volumes }}
+      {{- if eq $volumeMount.volume.name $volume.name }}
+        {{- $kind = "StatefulSet" -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end }}
+{{- end }}
+kind: {{ $kind }}
+metadata:
+  name: {{ $component.name | quote }}
+  labels:
+    "app.kubernetes.io/name": {{ $.Release.Name | quote }}
+    "app.kubernetes.io/managed-by": {{ $.Release.Service | quote }}
+  annotations:
+    "helm.sh/chart": "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+spec:
+  replicas: {{ $component.replicas | default 1 }}
+  selector:
+    matchLabels:
+      "app.kubernetes.io/name": {{ $.Release.Name | quote }}
+      "app.kubernetes.io/component": {{ $component.name | quote }}
+      "app.kubernetes.io/managed-by": {{ $.Release.Service | quote }}
+  template:
+    metadata:
+      labels:
+        "app.kubernetes.io/name": {{ $.Release.Name | quote }}
+        "app.kubernetes.io/component": {{ $component.name | quote }}
+        "app.kubernetes.io/managed-by": {{ $.Release.Service | quote }}
+      annotations:
+        "helm.sh/chart": "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+    spec:
+      terminationGracePeriodSeconds: 5
+      imagePullSecrets:
+        {{- range $secretIndex, $secretName := $.Values.pullSecrets }}
+        - name: {{ $secretName | quote }}
+        {{- end }}
+      containers:
+        {{- range $containerIndex, $container := $component.containers }}
+        - name: {{ $container.name | default "container" | quote }}
+          image: {{ $container.image | quote }}
+          command:
+            {{- range $commandIndex, $command := $container.command }}
+            - {{ $command | quote }}
+            {{- end }}
+          args:
+            {{- range $argIndex, $arg := $container.args }}
+            - {{ $arg | quote }}
+            {{- end }}
+          env:
+{{ toYaml $container.env | indent 12 }}
+          volumeMounts:
+            {{- range $volumeMountIndex, $volumeMount := $container.volumeMounts }}
+            - name: {{ $volumeMount.volume.name | quote }}
+              mountPath: {{ $volumeMount.containerPath | quote }}
+              subPath: {{ trimAll "/" $volumeMount.volume.path | default "" | quote }}
+              readOnly: {{ $volumeMount.volume.readOnly | default false }}
+            {{- end }}
+          {{- if $container.resources }}
+          resources:
+            {{- with $container.resources.limits }}
+            limits:
+              cpu: {{ .cpu | default "0" | quote }}
+              memory: {{ .memory | default "0" | quote }}
+              ephemeral-storage: {{ .ephemeralStorage | default "0" | quote }}
+            {{- end }}
+            {{- if $container.resources.requests }}
+            requests:
+              cpu: {{ $container.resources.requests.cpu | default "0" | quote }}
+              memory: {{ $container.resources.requests.memory | default "0" | quote }}
+              ephemeral-storage: {{ $container.resources.requests.ephemeralStorage | default "0" | quote }}
+            {{- else }}
+            requests:
+              cpu: "0"
+              memory: "0"
+              ephemeral-storage: "0"
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      volumes:
+        {{- range $volumeIndex, $volume := $.Values.volumes }}
+        - name: {{ $volume.name | quote }}
+          persistentVolumeClaim:
+            claimName: {{ $volume.name | quote }}
+        {{- end }}
+---
+{{- end }}

@@ -1,0 +1,18 @@
+version: v1beta9
+images:
+  default:
+    image: mydockeruser/quickstart
+deployments:
+- name: devspace-default
+  kubectl:
+    manifests:
+    - kube
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 3000
+  sync:
+  - imageName: default
+    excludePaths:
+    - node_modules

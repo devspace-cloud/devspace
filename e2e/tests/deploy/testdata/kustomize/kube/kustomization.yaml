@@ -1,0 +1,6 @@
+commonLabels:
+  app: devspace
+
+resources:
+- deployment.yaml
+- service.yaml

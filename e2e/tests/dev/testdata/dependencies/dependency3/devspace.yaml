@@ -1,0 +1,15 @@
+version: v1beta9
+images:
+  default:
+    image: mydockeruser/devspace
+    createPullSecret: true
+deployments:
+- name: dependency3
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: mydockeruser/devspace
+dependencies:
+- source:
+    path: ../dependency4

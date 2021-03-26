@@ -1,0 +1,52 @@
+version: v1beta9
+images:
+  app:
+    image: user/everythingIsThere
+    preferSyncOverRebuild: true
+    injectRestartHelper: true
+    appendDockerfileInstructions:
+    - USER root
+deployments:
+- name: everythingIsThere
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: user/everythingIsThere
+      service:
+        ports:
+        - port: 8081
+dev:
+  ports:
+  - imageName: app
+    forward:
+    - port: 8081
+  open:
+  - url: http://localhost:8081
+  sync:
+  - imageName: app
+    excludePaths:
+    - .git/
+    uploadExcludePaths:
+    - Dockerfile
+    - devspace.yaml
+    onUpload:
+      restartContainer: true
+profiles:
+- name: production
+  patches:
+  - op: remove
+    path: images.app.appendDockerfileInstructions
+  - op: remove
+    path: images.app.injectRestartHelper
+- name: interactive
+  patches:
+  - op: add
+    path: dev.interactive
+    value:
+      defaultEnabled: true
+  - op: add
+    path: images.app.entrypoint
+    value:
+    - sleep
+    - "9999999999"

@@ -1,122 +1,79 @@
 package build
 
 import (
-	"time"
+	"context"
 
+	"github.com/loft-sh/devspace/cmd"
+	"github.com/loft-sh/devspace/cmd/flags"
+	ginkgo "github.com/loft-sh/devspace/e2e/ginkgo-ext"
 	"github.com/loft-sh/devspace/e2e/utils"
-	"github.com/loft-sh/devspace/pkg/devspace/build"
-	"github.com/loft-sh/devspace/pkg/devspace/config/generated"
-	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
-	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
-	"github.com/loft-sh/devspace/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/loft-sh/devspace/pkg/devspace/plugin"
+	"github.com/spf13/cobra"
+
+	dockertypes "github.com/docker/docker/api/types"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type customFactory struct {
-	*utils.BaseCustomFactory
-	ctrl        build.Controller
-	builtImages map[string]string
-}
+var _ = ginkgo.Describe("build", func() {
+	var (
+		f          *utils.BaseCustomFactory
+		testDir    string
+		tmpDir     string
+		authConfig *dockertypes.AuthConfig
+	)
 
-// NewBuildController implements interface
-func (c *customFactory) NewBuildController(config *latest.Config, cache *generated.CacheConfig, client kubectl.Client) build.Controller {
-	c.ctrl = build.NewController(config, cache, client)
-	return c
-}
-func (c *customFactory) Build(options *build.Options, log log.Logger) (map[string]string, error) {
-	m, err := c.ctrl.Build(options, log)
-	c.builtImages = m
+	ginkgo.BeforeAll(func() {
+		var err error
+		testDir = "tests/build/testdata"
 
-	return m, err
-}
+		tmpDir, _, err = utils.CreateTempDir()
+		utils.ExpectNoError(err, "error creating tmp dir")
 
-type Runner struct{}
+		// Copy the testdata into the temp dir
+		err = utils.Copy(testDir, tmpDir)
+		utils.ExpectNoError(err, "error copying test dir")
 
-var RunNew = &Runner{}
+		f = utils.DefaultFactory
 
-func (r *Runner) SubTests() []string {
-	subTests := []string{}
-	for k := range availableSubTests {
-		subTests = append(subTests, k)
-	}
-
-	return subTests
-}
-
-var availableSubTests = map[string]func(factory *customFactory, logger log.Logger) error{
-	"default": runDefault,
-}
-
-func (r *Runner) Run(subTests []string, ns string, pwd string, logger log.Logger, verbose bool, timeout int) error {
-	logger.Info("Run test 'build'")
-
-	// Populates the tests to run with all the available sub tests if no sub tests are specified
-	if len(subTests) == 0 {
-		for subTestName := range availableSubTests {
-			subTests = append(subTests, subTestName)
+		dockerClient, err := f.NewDockerClient(f.GetLog())
+		utils.ExpectNoError(err, "create docker client")
+		authConfig, err = dockerClient.Login("hub.docker.com", "", "", true, false, false)
+		if err != nil || authConfig.Username == "" {
+			ginkgo.Skip("Can't login, skip kaniko " + err.Error())
 		}
-	}
 
-	f := &customFactory{
-		BaseCustomFactory: &utils.BaseCustomFactory{
-			Pwd:     pwd,
-			Verbose: verbose,
-			Timeout: timeout,
-		},
-	}
-
-	// Runs the tests
-	for _, subTestName := range subTests {
-		f.ResetLog()
-		c1 := make(chan error, 1)
-
-		go func() {
-			err := func() error {
-				// f.Namespace = utils.GenerateNamespaceName("test-build-" + subTestName)
-
-				err := availableSubTests[subTestName](f, logger)
-				utils.PrintTestResult("build", subTestName, err, logger)
-				if err != nil {
-					return errors.Errorf("test 'build' failed: %s %v", f.GetLogContents(), err)
-				}
-
-				return nil
-			}()
-			c1 <- err
-		}()
-
-		select {
-		case err := <-c1:
-			if err != nil {
-				return err
-			}
-		case <-time.After(time.Duration(timeout) * time.Second):
-			return errors.Errorf("Timeout error - the test did not return within the specified timeout of %v seconds: %s", timeout, f.GetLogContents())
+		// Create namespace
+		_, err = f.Client.KubeClient().CoreV1().Namespaces().Create(context.Background(), &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: f.Namespace,
+			},
+		}, metav1.CreateOptions{})
+		if err != nil && err.Error() != "namespaces \"testns\" already exists" {
+			utils.ExpectNoError(err, "error creating namespace")
 		}
-	}
+	})
 
-	return nil
-}
+	ginkgo.AfterAll(func() {
+		utils.DeleteTempAndResetWorkingDir(tmpDir, f.Pwd, f.GetLog())
+	})
 
-func beforeTest(f *customFactory, testFolder string) error {
-	dirPath, _, err := utils.CreateTempDir()
-	if err != nil {
-		return err
-	}
+	ginkgo.It("kaniko", func() {
+		// Change working directory
+		err := utils.ChangeWorkingDir(tmpDir+"/kaniko", f.GetLog())
+		utils.ExpectNoError(err, "error changing directory")
 
-	err = utils.Copy(f.Pwd+"/tests/build/testdata/"+testFolder, dirPath)
-	if err != nil {
-		return err
-	}
+		// Kaniko requires a dockerhub account
+		buildCmd := &cmd.BuildCmd{
+			GlobalFlags: &flags.GlobalFlags{
+				Namespace: f.Namespace,
+				NoWarn:    true,
+				Vars:      []string{"DEVSPACE_USERNAME=" + authConfig.Username},
+			},
+			SkipPush: true,
+		}
 
-	err = utils.ChangeWorkingDir(dirPath, f.GetLog())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func afterTest(f *customFactory) {
-	utils.DeleteTempAndResetWorkingDir(f.DirPath, f.Pwd, f.GetLog())
-}
+		err = buildCmd.Run(f, []plugin.Metadata{}, &cobra.Command{}, []string{})
+		utils.ExpectNoError(err, "executing command")
+	})
+})

@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    release: "{{ .Release.Name }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      release: "{{ .Release.Name }}"
+  template:
+    metadata:
+      annotations:
+        revision: "{{ .Release.Revision }}"
+      labels:
+        release: "{{ .Release.Name }}"
+    spec:
+      containers:
+      - name: default
+        image: "{{ .Values.containers.php.image }}"

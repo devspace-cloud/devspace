@@ -1,0 +1,14 @@
+version: v1beta9
+deployments:
+- name: root
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: nginx:latest
+dependencies:
+- source:
+    path: dependency3
+  name: test
+- source:
+    path: dependency4

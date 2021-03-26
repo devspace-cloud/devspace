@@ -1,0 +1,26 @@
+version: v1beta9
+images:
+  default:
+    image: mydockeruser/devspace
+    tags:
+      - my-tag-#####
+deployments:
+- name: default
+  helm:
+    chart:
+      name: ./chart
+    values:
+      image: image(mydockeruser/devspace)
+      tag: tag(mydockeruser/devspace)
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 3000
+  sync:
+  - imageName: default
+    excludePaths:
+    - node_modules
+commands:
+- name: dev-minikube
+  command: devspace dev --kube-context=minikube

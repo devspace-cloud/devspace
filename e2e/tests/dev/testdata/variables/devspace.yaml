@@ -1,0 +1,29 @@
+version: v1beta9
+deployments:
+  # This will be filled with a question on `devspace deploy` or `devspace dev`, alternatevly you could also set the
+  # environment variable SELECT to avoid the question and fill it automatically
+- name: ${SELECT}
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: ${IMAGE}
+commands:
+# Use `devspace run auto` to automatically fill the variables
+- name: auto
+  command: devspace deploy --var SELECT=deployment-1 --var IMAGE=nginx
+  description: "This command runs devspace deploy and sets some variables automatically"
+vars:
+- name: SELECT
+  question: Please choose a deployment name
+  options:
+  - deployment-1
+  - deployment-2
+- name: IMAGE
+  question: Please specify an image name, or press enter to use 'nginx'
+  validationPattern: ^n.*$
+  validationMessage: Only image names that start with a 'n' are allowed
+  default: nginx
+  source: input
+- name: UNUSED
+  question: This variable is not asked

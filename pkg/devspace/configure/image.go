@@ -3,11 +3,12 @@ package configure
 import (
 	contextpkg "context"
 	"fmt"
-	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
 	"io/ioutil"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/loft-sh/devspace/pkg/devspace/kubectl"
 
 	"github.com/loft-sh/devspace/pkg/devspace/build/builder/helper"
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"

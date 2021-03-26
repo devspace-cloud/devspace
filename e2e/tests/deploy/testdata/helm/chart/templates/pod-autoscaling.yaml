@@ -1,0 +1,29 @@
+{{- range $componentIndex, $component := .Values.components }}
+{{- if $component.autoScaling}}
+{{- if $component.autoScaling.horizontal }}
+{{- if gt $component.autoScaling.horizontal.maxReplicas $component.replicas }}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $component.name | quote }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $component.name | quote }}
+  minReplicas: {{ $component.replicas }}
+  maxReplicas: {{ $component.autoScaling.horizontal.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: {{ $component.autoScaling.horizontal.averageCPU }}
+  - type: Resource
+    resource:
+      name: memory
+      targetAverageValue: {{ $component.autoScaling.horizontal.averageMemory | quote }}
+---
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

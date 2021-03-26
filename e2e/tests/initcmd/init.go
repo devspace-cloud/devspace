@@ -1,219 +1,419 @@
 package initcmd
 
 import (
-	"bytes"
-	"path/filepath"
-	"reflect"
-	"time"
-
-	"github.com/loft-sh/devspace/pkg/util/survey"
-	"github.com/sirupsen/logrus"
-
 	"github.com/loft-sh/devspace/cmd"
+	ginkgo "github.com/loft-sh/devspace/e2e/ginkgo-ext"
 	"github.com/loft-sh/devspace/e2e/utils"
 	"github.com/loft-sh/devspace/pkg/devspace/build/builder/helper"
-	"github.com/loft-sh/devspace/pkg/devspace/configure"
-
+	"github.com/loft-sh/devspace/pkg/devspace/config"
+	"github.com/loft-sh/devspace/pkg/devspace/config/generated"
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
-	"github.com/loft-sh/devspace/pkg/util/log"
-	fakesurvey "github.com/loft-sh/devspace/pkg/util/survey/testing"
-
-	dockertypes "github.com/docker/docker/api/types"
-	"github.com/loft-sh/devspace/pkg/devspace/docker"
-	fakedocker "github.com/loft-sh/devspace/pkg/devspace/docker/testing"
-	"github.com/pkg/errors"
-
-	yaml "gopkg.in/yaml.v2"
+	"github.com/loft-sh/devspace/pkg/devspace/plugin"
+	"github.com/loft-sh/devspace/pkg/util/ptr"
+	"github.com/spf13/cobra"
 )
 
+var _ = ginkgo.Describe("init", func() {
+	var (
+		f       *customFactory
+		testDir string
+		tmpDir  string
+	)
+
+	ginkgo.BeforeAll(func() {
+		var err error
+		testDir = "tests/initcmd/testdata"
+		tmpDir, _, err = utils.CreateTempDir()
+		utils.ExpectNoError(err, "error creating tmp dir")
+
+		// Copy the testdata into the temp dir
+		err = utils.Copy(testDir, tmpDir)
+		utils.ExpectNoError(err, "error copying test dir")
+		f = &customFactory{
+			utils.DefaultFactory,
+		}
+	})
+
+	ginkgo.AfterAll(func() {
+		utils.DeleteTempAndResetWorkingDir(tmpDir, f.Pwd, f.GetLog())
+	})
+
+	ginkgo.It("Create dockerfile", func() {
+		runTest(f, initTestCase{
+			dir:     tmpDir + "/data1",
+			answers: []string{cmd.CreateDockerfileOption, "go", "Use hub.docker.com => you are logged in as user", "user/data1", "build", "8080", cmd.ComponentChartOption},
+			expected: config.NewConfig(map[interface{}]interface{}{
+				"profiles": []interface{}{
+					map[interface{}]interface{}{
+						"name": "production",
+						"patches": []interface{}{
+							map[interface{}]interface{}{
+								"op":   "remove",
+								"path": "images.app.appendDockerfileInstructions",
+							},
+							map[interface{}]interface{}{
+								"op":   "remove",
+								"path": "images.app.injectRestartHelper",
+							},
+							map[interface{}]interface{}{
+								"op":   "remove",
+								"path": "images.app.rebuildStrategy",
+							},
+							map[interface{}]interface{}{
+								"op":   "remove",
+								"path": "images.app.build.docker.options.target",
+							},
+						},
+					},
+					map[interface{}]interface{}{
+						"patches": []interface{}{
+							map[interface{}]interface{}{
+								"path": "dev.interactive",
+								"value": map[interface{}]interface{}{
+									"defaultEnabled": true,
+								},
+								"op": "add",
+							},
+							map[interface{}]interface{}{
+								"op":    "add",
+								"path":  "images.app.entrypoint",
+								"value": []interface{}{"sleep", "9999999999"},
+							},
+						},
+						"name": "interactive",
+					},
+				},
+				"version": "v1beta9",
+				"images": map[interface{}]interface{}{
+					"app": map[interface{}]interface{}{
+						"image":                        "user/data1",
+						"injectRestartHelper":          true,
+						"appendDockerfileInstructions": []interface{}{"USER root"},
+						"rebuildStrategy":              "ignoreContextChanges",
+						"build": map[interface{}]interface{}{
+							"docker": map[interface{}]interface{}{
+								"options": map[interface{}]interface{}{
+									"target": "build",
+								},
+							},
+						},
+					},
+				},
+				"deployments": []interface{}{
+					map[interface{}]interface{}{
+						"name": "data1",
+						"helm": map[interface{}]interface{}{
+							"componentChart": true,
+							"values": map[interface{}]interface{}{
+								"containers": []interface{}{
+									map[interface{}]interface{}{
+										"image": "user/data1",
+									},
+								},
+								"service": map[interface{}]interface{}{
+									"ports": []interface{}{
+										map[interface{}]interface{}{
+											"port": 8080,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				"dev": map[interface{}]interface{}{
+					"ports": []interface{}{
+						map[interface{}]interface{}{
+							"forward": []interface{}{
+								map[interface{}]interface{}{
+									"port": 8080,
+								},
+							},
+							"imageName": "app",
+						},
+					},
+					"open": []interface{}{
+						map[interface{}]interface{}{
+							"url": "http://localhost:8080",
+						},
+					},
+					"sync": []interface{}{
+						map[interface{}]interface{}{
+							"imageName":          "app",
+							"excludePaths":       []interface{}{".git/"},
+							"uploadExcludePaths": []interface{}{"Dockerfile", "devspace.yaml"},
+							"onUpload": map[interface{}]interface{}{
+								"restartContainer": true,
+							},
+						},
+					},
+				},
+			}, &latest.Config{
+				Version: latest.Version,
+				Images: map[string]*latest.ImageConfig{
+					"app": &latest.ImageConfig{
+						Image:                        "user/data1",
+						PreferSyncOverRebuild:        false,
+						InjectRestartHelper:          true,
+						AppendDockerfileInstructions: []string{"USER root"},
+						RebuildStrategy:              "ignoreContextChanges",
+						Build: &latest.BuildConfig{
+							Docker: &latest.DockerConfig{
+								Options: &latest.BuildOptions{
+									Target: "build",
+								},
+							},
+						},
+					},
+				},
+				Deployments: []*latest.DeploymentConfig{
+					&latest.DeploymentConfig{
+						Name: "data1",
+						Helm: &latest.HelmConfig{
+							ComponentChart: ptr.Bool(true),
+							Values: map[interface{}]interface{}{
+								"containers": []interface{}{
+									map[interface{}]interface{}{
+										"image": "user/data1",
+									},
+								},
+								"service": map[interface{}]interface{}{
+									"ports": []interface{}{
+										map[interface{}]interface{}{
+											"port": 8080,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Dev: &latest.DevConfig{
+					Ports: []*latest.PortForwardingConfig{
+						&latest.PortForwardingConfig{
+							ImageName: "app",
+							PortMappings: []*latest.PortMapping{
+								&latest.PortMapping{
+									LocalPort: ptr.Int(8080),
+								},
+							},
+						},
+					},
+					Open: []*latest.OpenConfig{
+						&latest.OpenConfig{
+							URL: "http://localhost:8080",
+						},
+					},
+					Sync: []*latest.SyncConfig{
+						&latest.SyncConfig{
+							ImageName:          "app",
+							ExcludePaths:       []string{".git/"},
+							UploadExcludePaths: []string{"Dockerfile", "devspace.yaml"},
+							OnUpload: &latest.SyncOnUpload{
+								RestartContainer: true,
+							},
+						},
+					},
+				},
+			}, &generated.Config{
+				Vars:     map[string]string{},
+				Profiles: map[string]*generated.CacheConfig{},
+			}, map[string]interface{}{}),
+		})
+	})
+
+	ginkgo.It("Everything already created", func() {
+		runTest(f, initTestCase{
+			dir: tmpDir + "/everythingIsThere",
+			expected: config.NewConfig(map[interface{}]interface{}{
+				"profiles": []interface{}{
+					map[interface{}]interface{}{
+						"name": "production",
+						"patches": []interface{}{
+							map[interface{}]interface{}{
+								"op":   "remove",
+								"path": "images.app.appendDockerfileInstructions",
+							},
+							map[interface{}]interface{}{
+								"op":   "remove",
+								"path": "images.app.injectRestartHelper",
+							},
+						},
+					},
+					map[interface{}]interface{}{
+						"patches": []interface{}{
+							map[interface{}]interface{}{
+								"path": "dev.interactive",
+								"value": map[interface{}]interface{}{
+									"defaultEnabled": true,
+								},
+								"op": "add",
+							},
+							map[interface{}]interface{}{
+								"op":    "add",
+								"path":  "images.app.entrypoint",
+								"value": []interface{}{"sleep", "9999999999"},
+							},
+						},
+						"name": "interactive",
+					},
+				},
+				"version": "v1beta9",
+				"images": map[interface{}]interface{}{
+					"app": map[interface{}]interface{}{
+						"image":                        "user/everythingIsThere",
+						"injectRestartHelper":          true,
+						"appendDockerfileInstructions": []interface{}{"USER root"},
+						"preferSyncOverRebuild":        true,
+					},
+				},
+				"deployments": []interface{}{
+					map[interface{}]interface{}{
+						"name": "everythingIsThere",
+						"helm": map[interface{}]interface{}{
+							"componentChart": true,
+							"values": map[interface{}]interface{}{
+								"containers": []interface{}{
+									map[interface{}]interface{}{
+										"image": "user/everythingIsThere",
+									},
+								},
+								"service": map[interface{}]interface{}{
+									"ports": []interface{}{
+										map[interface{}]interface{}{
+											"port": 8081,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				"dev": map[interface{}]interface{}{
+					"ports": []interface{}{
+						map[interface{}]interface{}{
+							"forward": []interface{}{
+								map[interface{}]interface{}{
+									"port": 8081,
+								},
+							},
+							"imageName": "app",
+						},
+					},
+					"open": []interface{}{
+						map[interface{}]interface{}{
+							"url": "http://localhost:8081",
+						},
+					},
+					"sync": []interface{}{
+						map[interface{}]interface{}{
+							"imageName":          "app",
+							"excludePaths":       []interface{}{".git/"},
+							"uploadExcludePaths": []interface{}{"Dockerfile", "devspace.yaml"},
+							"onUpload": map[interface{}]interface{}{
+								"restartContainer": true,
+							},
+						},
+					},
+				},
+			}, &latest.Config{
+				Version: latest.Version,
+				Images: map[string]*latest.ImageConfig{
+					"app": &latest.ImageConfig{
+						Image:                        "user/everythingIsThere",
+						PreferSyncOverRebuild:        true,
+						InjectRestartHelper:          true,
+						AppendDockerfileInstructions: []string{"USER root"},
+					},
+				},
+				Deployments: []*latest.DeploymentConfig{
+					&latest.DeploymentConfig{
+						Name: "everythingIsThere",
+						Helm: &latest.HelmConfig{
+							ComponentChart: ptr.Bool(true),
+							Values: map[interface{}]interface{}{
+								"containers": []interface{}{
+									map[interface{}]interface{}{
+										"image": "user/everythingIsThere",
+									},
+								},
+								"service": map[interface{}]interface{}{
+									"ports": []interface{}{
+										map[interface{}]interface{}{
+											"port": 8081,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Dev: &latest.DevConfig{
+					Ports: []*latest.PortForwardingConfig{
+						&latest.PortForwardingConfig{
+							ImageName: "app",
+							PortMappings: []*latest.PortMapping{
+								&latest.PortMapping{
+									LocalPort: ptr.Int(8081),
+								},
+							},
+						},
+					},
+					Open: []*latest.OpenConfig{
+						&latest.OpenConfig{
+							URL: "http://localhost:8081",
+						},
+					},
+					Sync: []*latest.SyncConfig{
+						&latest.SyncConfig{
+							ImageName:          "app",
+							ExcludePaths:       []string{".git/"},
+							UploadExcludePaths: []string{"Dockerfile", "devspace.yaml"},
+							OnUpload: &latest.SyncOnUpload{
+								RestartContainer: true,
+							},
+						},
+					},
+				},
+			}, &generated.Config{
+				Vars:     map[string]string{},
+				Profiles: map[string]*generated.CacheConfig{},
+			}, map[string]interface{}{}),
+		})
+	})
+})
+
 type initTestCase struct {
-	name    string
+	dir     string
 	answers []string
 
-	expectedConfig *latest.Config
-	tempLogger     log.Logger
+	expected config.Config
 }
 
-type customFactory struct {
-	*utils.BaseCustomFactory
-}
+func runTest(f *customFactory, testCase initTestCase) {
+	err := utils.ChangeWorkingDir(testCase.dir, f.GetLog())
+	utils.ExpectNoError(err, "error changing directory")
 
-type customLogger struct {
-	log.Logger
-	*fakesurvey.FakeSurvey
-}
-
-func (c *customFactory) NewDockerClientWithMinikube(currentKubeContext string, preferMinikube bool, log log.Logger) (docker.Client, error) {
-	fakeDockerClient := &fakedocker.FakeClient{
-		AuthConfig: &dockertypes.AuthConfig{
-			Username: "user",
-			Password: "pass",
-		},
-	}
-	return fakeDockerClient, nil
-}
-
-func (c *customFactory) NewConfigureManager(config *latest.Config, log log.Logger) configure.Manager {
-	return configure.NewManager(c, config, log)
-}
-
-func (c *customLogger) Question(params *survey.QuestionOptions) (string, error) {
-	return c.FakeSurvey.Question(params)
-}
-
-// GetLog implements interface
-func (c *customFactory) GetLog() log.Logger {
-	if c.CacheLogger == nil {
-		if c.Verbose {
-			c.CacheLogger = &customLogger{
-				Logger:     log.GetInstance(),
-				FakeSurvey: fakesurvey.NewFakeSurvey(),
-			}
-		} else {
-			c.Buff = &bytes.Buffer{}
-			c.CacheLogger = &customLogger{
-				Logger:     log.NewStreamLogger(c.Buff, logrus.InfoLevel),
-				FakeSurvey: fakesurvey.NewFakeSurvey(),
-			}
-		}
-	}
-
-	return c.CacheLogger
-}
-
-var availableSubTests = map[string]func(factory *customFactory, logger log.Logger) error{
-	"create_dockerfile":       CreateDockerfile,
-	"use_existing_dockerfile": UseExistingDockerfile,
-	"use_dockerfile":          UseDockerfile,
-	"use_manifests":           UseManifests,
-	"use_chart":               UseChart,
-}
-
-type Runner struct{}
-
-var RunNew = &Runner{}
-
-func (r *Runner) SubTests() []string {
-	subTests := []string{}
-	for k := range availableSubTests {
-		subTests = append(subTests, k)
-	}
-
-	return subTests
-}
-
-func (r *Runner) Run(subTests []string, ns string, pwd string, logger log.Logger, verbose bool, timeout int) error {
-	logger.Info("Run 'init' test")
-
-	// Populates the tests to run with all the available sub tests if no sub tests is specified
-	if len(subTests) == 0 {
-		for subTestName := range availableSubTests {
-			subTests = append(subTests, subTestName)
-		}
-	}
-
-	f := &customFactory{
-		BaseCustomFactory: &utils.BaseCustomFactory{
-			Pwd:     pwd,
-			Verbose: verbose,
-			Timeout: timeout,
-		},
-	}
-
-	// Runs the tests
-	for _, subTestName := range subTests {
-		f.ResetLog()
-		c1 := make(chan error)
-
-		go func() {
-			err := func() error {
-				f.Namespace = utils.GenerateNamespaceName("test-init-" + subTestName)
-				err := availableSubTests[subTestName](f, logger)
-				utils.PrintTestResult("init", subTestName, err, logger)
-				if err != nil {
-					return errors.Errorf("test 'init' failed: %s %v", f.GetLogContents(), err)
-				}
-
-				return nil
-			}()
-			c1 <- err
-		}()
-
-		select {
-		case err := <-c1:
-			if err != nil {
-				return err
-			}
-		case <-time.After(time.Duration(timeout) * time.Second):
-			return errors.Errorf("Timeout error - the test did not return within the specified timeout of %v seconds: %s", timeout, f.GetLogContents())
-		}
-	}
-
-	return nil
-}
-
-func runTest(f *customFactory, testCase initTestCase) error {
-	initConfig := cmd.InitCmd{
+	initCmd := cmd.InitCmd{
 		Dockerfile:  helper.DefaultDockerfilePath,
 		Reconfigure: false,
 		Context:     "",
 		Provider:    "",
 	}
 
-	for _, a := range testCase.answers {
-		f.GetLog().(*customLogger).SetNextAnswer(a)
+	survey, err := f.GetSurvey()
+	utils.ExpectNoError(err, "get survey")
+	for _, answer := range testCase.answers {
+		survey.SetNextAnswer(answer)
 	}
 
-	// runs init cmd
-	err := initConfig.Run(f, nil, nil)
-	if err != nil {
-		return err
+	err = initCmd.Run(f, []plugin.Metadata{}, &cobra.Command{}, []string{})
+	utils.ExpectNoError(err, "executing command")
+
+	if testCase.expected != nil {
+		config, err := f.NewConfigLoader("").Load(nil, f.GetLog())
+		utils.ExpectNoError(err, "new config loader")
+
+		utils.ExpectEqual(config, testCase.expected, "Unexpected config")
 	}
-
-	if testCase.expectedConfig != nil {
-		config, err := f.NewConfigLoader(nil, nil).Load()
-		if err != nil {
-			return err
-		}
-
-		isEqual := reflect.DeepEqual(config, testCase.expectedConfig)
-		if !isEqual {
-			configYaml, _ := yaml.Marshal(config)
-			expectedYaml, _ := yaml.Marshal(testCase.expectedConfig)
-
-			return errors.Errorf("TestCase '%v': Got\n %s\n\n, but expected\n\n %s\n", testCase.name, configYaml, expectedYaml)
-		}
-	}
-
-	return nil
-}
-
-func beforeTest(f *customFactory, logger log.Logger, testDir string) error {
-	testDir = filepath.FromSlash(testDir)
-
-	dirPath, dirName, err := utils.CreateTempDir()
-	if err != nil {
-		return err
-	}
-
-	f.DirPath = dirPath
-	f.DirName = dirName
-
-	// Copy the testdata into the temp dir
-	err = utils.Copy(testDir, dirPath)
-	if err != nil {
-		return err
-	}
-
-	// Change working directory
-	err = utils.ChangeWorkingDir(dirPath, f.GetLog())
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func afterTest(f *customFactory) {
-	utils.DeleteTempAndResetWorkingDir(f.DirPath, f.Pwd, f.GetLog())
 }

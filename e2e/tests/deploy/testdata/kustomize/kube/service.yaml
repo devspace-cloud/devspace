@@ -1,0 +1,10 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-service
+spec:
+  selector:
+    app.kubernetes.io/component: default
+  ports:
+  - protocol: TCP
+    port: 3000

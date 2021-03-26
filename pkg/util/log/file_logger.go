@@ -22,6 +22,12 @@ type fileLogger struct {
 	logger *logrus.Logger
 }
 
+// SetFakeFileLogger overwrites a fileLogger with a fake logger
+// Only use this in tests
+func SetFakeFileLogger(key string, logger Logger) {
+	logs[key] = logger
+}
+
 // GetFileLogger returns a logger instance for the specified filename
 func GetFileLogger(filename string) Logger {
 	logsMutext.Lock()

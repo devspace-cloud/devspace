@@ -2,10 +2,11 @@ package services
 
 import (
 	"context"
-	"github.com/loft-sh/devspace/pkg/devspace/config/generated"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/loft-sh/devspace/pkg/devspace/config/generated"
 
 	"github.com/loft-sh/devspace/pkg/devspace/config/versions/latest"
 	"github.com/loft-sh/devspace/pkg/devspace/services/targetselector"

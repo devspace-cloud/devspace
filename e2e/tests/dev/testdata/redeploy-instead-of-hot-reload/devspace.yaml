@@ -1,0 +1,13 @@
+version: v1beta9
+images:
+  default:
+    image: yourusername/devspace
+deployments:
+- name: devspace-default
+  kubectl:
+    manifests:
+    - kube
+dev:
+  autoReload:
+    paths:
+    - ./**

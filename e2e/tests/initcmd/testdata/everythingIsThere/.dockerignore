@@ -1,0 +1,4 @@
+Dockerfile
+
+# Ignore devspace.yaml file to prevent image rebuilding after config changes
+devspace.yaml

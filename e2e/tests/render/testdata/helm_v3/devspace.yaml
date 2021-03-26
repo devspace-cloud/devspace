@@ -1,14 +1,14 @@
 version: v1beta5
 images:
   default:
-    image: dscr.io/yourusername/devspace
+    image: dscr.io/rendertestuser/helmv3
 deployments:
   - name: quickstart
     helm:
       componentChart: true
       values:
         containers:
-          - image: dscr.io/yourusername/devspace
+          - image: dscr.io/rendertestuser/helmv3
         service:
           ports:
             - port: 3000

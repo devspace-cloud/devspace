@@ -1,0 +1,31 @@
+# Note: This example only works in minikube, since the custom builder
+# does not push the image
+version: v1beta7
+images:
+  default:
+    image: devspace
+    build:
+      custom:
+        command: ./custom/build
+        # command: docker
+        # args:
+        # - build
+        # - .
+        # - --tag
+        # appendArgs:
+        # - --file
+        # - ./custom/Dockerfile
+        onChange:
+        - main.go
+deployments:
+- name: custom-builder-deployment
+  kubectl:
+    manifests:
+    - kube
+dev:
+  ports:
+  - imageName: default
+    forward:
+    - port: 8080
+  sync:
+  - imageName: default

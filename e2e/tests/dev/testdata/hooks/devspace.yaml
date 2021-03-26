@@ -1,0 +1,48 @@
+version: v1beta9
+images:
+  default:
+    image: mydockeruser/devspace
+deployments:
+- name: hook-deployment
+  helm:
+    componentChart: true
+    values:
+      containers:
+      - image: mydockeruser/devspace
+hooks:
+- command: echo
+  args:
+  - before image building
+  when:
+    before:
+      images: all
+- command: echo
+  args:
+  - after image building
+  when:
+    after:
+      images: all
+- command: echo
+  args:
+  - before deploying
+  when:
+    before:
+      deployments: all
+- command: echo
+  args:
+  - after deploying
+  when:
+    after:
+      deployments: all
+- command: echo
+  args:
+  - before deployment my-deployment
+  when:
+    before:
+      deployments: my-deployment
+- command: echo
+  args:
+  - after deployment my-deployment
+  when:
+    after:
+      deployments: my-deployment

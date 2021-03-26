@@ -1,14 +1,17 @@
 version: v1beta5
 images:
   default:
-    image: dscr.io/${DEVSPACE_USERNAME}/devspace
+    image: ${DEVSPACE_USERNAME}/e2etest
+    build:
+      kaniko:
+        cache: true
 deployments:
-- name: quickstart
+- name: helmv3deploy
   helm:
     componentChart: true
     values:
       containers:
-      - image: dscr.io/${DEVSPACE_USERNAME}/devspace
+      - image: ${DEVSPACE_USERNAME}/e2etest
       service:
         ports:
         - port: 3000
