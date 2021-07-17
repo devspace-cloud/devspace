@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+    "regexp"
 )
 
 // PredefinedVariableOptions holds the options for a predefined variable to load
@@ -68,6 +69,24 @@ var predefinedVars = map[string]PredefinedVariableFunction{
 		}
 
 		return branch, nil
+	},
+	"DEVSPACE_GIT_BRANCH_SLUG": func(options *PredefinedVariableOptions) (interface{}, error) {
+		configPath := options.BasePath
+		if configPath == "" {
+			configPath = options.ConfigPath
+		}
+
+		branch, err := git.GetBranch(filepath.Dir(configPath))
+		if err != nil {
+			return "", fmt.Errorf("error retrieving git branch: %v, but predefined var DEVSPACE_GIT_BRANCH_SLUG is used", err)
+		}
+        reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+        branchSlug := reg.ReplaceAllString(branch, "-")
+		if err != nil {
+			return "", fmt.Errorf("error slug regexp for branch: %v, but predefined var DEVSPACE_GIT_BRANCH_SLUG is used", err)
+		}
+
+		return branchSlug, nil
 	},
 	"DEVSPACE_GIT_COMMIT": func(options *PredefinedVariableOptions) (interface{}, error) {
 		configPath := options.BasePath
